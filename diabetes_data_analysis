@@ -1,0 +1,303 @@
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+
+def clean_data(data):
+    """
+    Begins by removing all entries which are missing values in the foloowing columns:
+    Diabetes_012, HighBP, HighChol, Sex, MentHlth, and PhysHlth.
+
+    Example:
+    >>> clean_data(pd.DataFrame(["Diabetes_012", "HighBP", "HighChol", "Sex", "MentHlth", "PhysHlth"]
+                [0, 0, NaN, 0, 0, 15],
+                [NaN, 1, 1, 0, 12, 0],
+                [2, 1, 0, 1, 13, 0]))
+    [[2, 1, 0, 1, 13, 0]]
+    """
+    #remove any entries with NaN in the diabetes, HighBP, HighChol, Sex, MentHlth, and PhysHlth columns
+    cleaned_data = data.dropna(subset = ["Diabetes_012", "HighBP", "HighChol", "MentHlth", "PhysHlth", "Sex"])
+
+    return cleaned_data
+
+def diabetes_subset(cleaned_data):
+    """
+    Returns a data frame containing only individuals with diabetes ("Diabetes_012" == 2).
+    Assumes data will already be cleaned.
+
+    Example:
+    >>> diabetes_subset(["Diabetes_012", "HighBP", "HighChol", "MentHlth", "PhysHlth", "Sex"]
+                [0, 0, 1, 15, 0, 0],
+                [1, 1, 1, 0, 12, 0],
+                [2, 1, 0, 1, 13, 0])
+    [[2, 1, 0, 1, 13, 0]]
+    """
+    #from cleaned_data, access the columns where "Diabetes_012" is equivalent to 2.0. Assign it to has_diabetes
+    has_diabetes = cleaned_data[cleaned_data["Diabetes_012"] == 2.0]
+    return has_diabetes
+
+def no_and_pre_diabetes_subset(cleaned_data):
+    """
+    Return a data frame containing individuals with no diabetes or pre-diabetes ("Diabetes_012 == 0 or 1).
+    Assumes data will already be cleaned.
+
+    Example:
+    >>> no_and_pre_diabetes_subset(["Diabetes_012", "HighBP", "HighChol", "Sex", "MentHlth", "PhysHlth"]
+                [0, 0, 1, 15, 0, 0],
+                [1, 1, 1, 0, 12, 0],
+                [2, 1, 0, 1, 13, 0])
+    [[0, 0, 1, 15, 0, 0],
+    [1, 1, 1, 0, 12, 0]]
+    """
+    #from cleaned_data, access columns where "Diabetes_012" is equal to 0.0 or 1.0 and assign it to no_and_pre_diabetes
+    no_and_pre_diabetes = cleaned_data[cleaned_data["Diabetes_012"] != 2.0]
+    return no_and_pre_diabetes
+
+def conditions_co_occurrences(diabetes_set) -> dict:
+    """
+    Returns a dictionary with how many people have diabetes and another condition.
+    Dictionary wil contain: the amount of people with diabetes and high blood pressure, people with diabetes and high cholesterol, and people with all three.
+    Values will be adjusted so no participants is represented twice in the dictionary.
+    Assumes data will already be cleaned and will only contain individuals with diabetes.
+    Example:
+    >>> [["Diabetes_012", "HighBP", "HighChol"], 
+        [2, 1, 0],
+        [2, 0, 1],
+        [2, 1, 1]]
+    {Diabetes and High Blood Pressure: 1, Diabetes and High Cholesterol: 1, Diabetes, High Blood Pressure, and High Cholesterol: 1}
+    """
+    co_occurrences = {} #initialize the dictionary
+
+    #find how many people have diabetes and high blood pressure (HighBP == 1)
+    diabetes_and_highBP_counts = diabetes_set.groupby(["HighBP"]).size() #returns the number of people with and without high blood pressure
+    diabetes_and_highBP = diabetes_and_highBP_counts.get(1.0, 0) #uses only the people with high blood pressure
+    #add it to the dictionary
+    co_occurrences["Diabetes and High Blood Pressure"] = diabetes_and_highBP
+
+    #find how many people have diabetes and high cholesterol (HighChol == 1)
+    diabetes_and_highChol_counts = diabetes_set.groupby(["HighChol"]).size() #returns the number of people with and without high cholesterol
+    diabetes_and_highChol = diabetes_and_highChol_counts.get(1.0, 0) #uses only the people with high cholesterol
+    #add it to the dictionary
+    co_occurrences["Diabetes and High Cholesterol"] = diabetes_and_highChol
+
+    #find how many people have diabetes, high BP, and high cholesterol (HighBP == 1, HighChol == 1)
+    has_diabetes_highBP = diabetes_set[diabetes_set["HighBP"] == 1.0] #finding the group of people with diabetes and high blood pressure
+    diabetes_highBP_highChol_counts = has_diabetes_highBP.groupby(["HighChol"]).size() #shows the people who have all three and those with only diabetes
+                                                                                        #and high cholesterol
+    diabetes_highBP_highChol = diabetes_highBP_highChol_counts.get(1.0, 0) #uses only the people with all three
+    #add it to dictionary
+    co_occurrences["Diabetes, High Blood Pressure, and High Cholesterol"] = diabetes_highBP_highChol
+
+    
+    """
+    Remove people who have been represented twice
+    All people represented in the category with all three conditions will also be represented in the diabtes and high BP category and the diabetes
+    and high cholesterol category. Therefore, to make sure no one is represented twice, we subtract the number of people with all three from the other two
+    categories."""
+    #fixing the Diabetes and High Blood Pressure category
+    co_occurrences["Diabetes and High Blood Pressure"] = co_occurrences.get("Diabetes and High Blood Pressure") - co_occurrences.get("Diabetes, High Blood Pressure, and High Cholesterol")
+    #fixing the Diabetes and High Cholesterol category
+    co_occurrences["Diabetes and High Cholesterol"] = co_occurrences.get("Diabetes and High Cholesterol") - co_occurrences.get("Diabetes, High Blood Pressure, and High Cholesterol")
+
+    #find how many people have only diabetes (the rest of the rows in the data set)
+    co_occurrences["Only diabetes"] = diabetes_set.shape[0] - (co_occurrences["Diabetes and High Blood Pressure"] + co_occurrences["Diabetes and High Cholesterol"] + co_occurrences["Diabetes, High Blood Pressure, and High Cholesterol"])
+
+    return co_occurrences
+
+def co_occurrences_to_percentages(co_occurrence_dict: dict) -> dict:
+    """
+    Calculate what percentages of individuals with diabetes have another condition and rounds it to the nearest hundredths place.
+    
+    Example:
+    >>> co_occurrences_to_percentage({"Diabetes and High Blood Pressure": 1000, "Diabetes and High Cholesterol": 4000, "Diabetes, High Blood Pressure, and High Cholesterol": 5000})
+    {"Diabetes and High Blood Pressure": 0.10, "Diabetes and High Cholesterol": 0.40, "Diabetes, High Blood Pressure, and High Cholesterol": 0.50}
+    """
+    #find the number of people with diabetes using the dictionary
+    num_people_with_diabetes = sum(co_occurrence_dict.values())
+
+    co_occurrence_percent = {} #initialize the dictionary to hold the percentages
+
+    #calculate the percentages and round them to 2 decimal points. Then add them to the dictionary.
+    co_occurrence_percent["Diabetes and High Blood Pressure"] = round((co_occurrence_dict.get("Diabetes and High Blood Pressure")/num_people_with_diabetes) * 100, 2)
+    co_occurrence_percent["Diabetes and High Cholesterol"] = round((co_occurrence_dict.get("Diabetes and High Cholesterol")/num_people_with_diabetes) * 100, 2)
+    co_occurrence_percent["Diabetes, High Blood Pressure, and High Cholesterol"] = round((co_occurrence_dict.get("Diabetes, High Blood Pressure, and High Cholesterol")/num_people_with_diabetes) * 100, 2)
+    co_occurrence_percent["Only diabetes"] = round((co_occurrence_dict.get("Only diabetes")/num_people_with_diabetes) * 100, 2)
+    return co_occurrence_percent
+
+def display_heat_map(percent_dict):
+    """
+    Show a heat map where each color shows the percentage of people with diabetes and each other condition (high BP, high cholesterol, or both)
+    """
+    #code is strucutred based on matplotlib annotated heatmap documentation
+    conditions = ["Only \nDiabetes", "High \nBlood Pressure", "High \nCholesterol", "Both"] #list of conditions, used for labeling purposes
+    diabetes = ["Diabetes"] #used for labeling purposes
+
+    #turning the dictionary into a numpy array
+    percentages = np.array([[percent_dict.get("Only diabetes"),
+                            percent_dict.get("Diabetes and High Blood Pressure"),
+                            percent_dict.get("Diabetes and High Cholesterol"),
+                            percent_dict.get("Diabetes, High Blood Pressure, and High Cholesterol")]])
+
+    #set up the subplots
+    fig, ax = plt.subplots()
+    im = ax.imshow(percentages, cmap="YlGnBu")
+
+    #show color bar key
+    cbar = ax.figure.colorbar(im, ax=ax)
+    cbar.ax.set_ylabel("Percentage") #label the y axis
+
+    ax.set_xticks(range(len(conditions)), labels = conditions, rotation=0, rotation_mode = "anchor") #name the conditions on the x axis
+    ax.set_yticks(range(len(diabetes)), labels = diabetes) #label the y axis
+
+    #pt an annotation in each of the boxes on the plot (except for the last one)
+    for i in range(len(diabetes)):
+        for j in range(len(conditions) - 1):
+            text = ax.text(j, i, percentages[i, j], ha="center", va="center", color="black")
+    #the last one needs white text since its color is much different from the other two
+    text = ax.text(3, 0, percentages[0, 3], ha = "center", va = "center", color = "white")
+
+    ax.set_title("Percentages of individuals with diabetes and \nhigh blood pressure, high cholesterol, or both") #set graph title
+    plt.savefig("conditions_heatmap.jpg") #save the figure
+    plt.show()
+
+def display_bar_graph(co_occurrences_dict):
+    """
+    Create a bar graph with the amount of people who have diabetes and high blood pressure, high cholesterol, or both.
+    """
+    conditions = ["Only \nDiabetes", "High Blood \nPressure", "High Cholesterol", "Both"] #list of conditions
+    #list of values pulled from the dictionary
+    values = [co_occurrences_dict.get("Only diabetes"), co_occurrences_dict.get("Diabetes and High Blood Pressure"), co_occurrences_dict.get("Diabetes and High Cholesterol"), co_occurrences_dict.get("Diabetes, High Blood Pressure, and High Cholesterol")]
+
+    #creating a bar graph
+    plt.bar(conditions, values) #conditions and they're respective values
+    plt.xlabel("Conditions") #labeling the x axis
+    plt.ylabel("Number of people") #labeling the y axis
+    plt.title("Number of people with different diagnosis combinations")
+    plt.savefig("conditions_bargraph.jpg") #saving the figure
+    plt.show()
+
+def diabetes_and_gender_percent(cleaned_data) -> dict:
+    """
+    Calculates the percentages of men and women who have diabetes and rounds it to the nearest hundredth
+    Assume the data has already been cleaned.
+    """
+    gender_diabetes_percent = {} #initialize the dictionary
+
+    female = cleaned_data[cleaned_data["Sex"] == 0.0] #isolates all females from the data
+    female_and_diabetes_count = female.groupby(["Diabetes_012"]).size() #shows how many females do and do not have diabetes
+    female_and_diabetes = female_and_diabetes_count[2.0] #only uses females who do have diabetes
+
+    #percentage of females with diabetes
+    gender_diabetes_percent["Female %"] = round((female_and_diabetes / female.shape[0]) * 100, 2)
+
+    male = cleaned_data[cleaned_data["Sex"] == 1.0] #isolates all males from the data
+    male_and_diabetes_count = male.groupby(["Diabetes_012"]).size() #shows how many males do and do not have diabetes
+    male_and_diabetes = male_and_diabetes_count[2.0] #only uses males who do have diabetes
+
+    #percentage of males with diabetes
+    gender_diabetes_percent["Male %"] = round((male_and_diabetes / male.shape[0]) * 100, 2)
+
+    return gender_diabetes_percent
+
+
+def make_health_hist(no_and_pre_diabetes_set, diabetes_set, condition):
+    """
+    Creates a histogram that shows distribution of poor health days in the past 30 days.
+    Condition is either "MentHlth" and "PhysHlth"
+    """
+    #setting name depending on parameter
+    if condition == "PhysHlth":
+        condition_name = "Physical Health"
+    if condition == "MentHlth":
+        condition_name = "Mental Health"
+
+    #no and pre diabetes data. looks at the specific condition
+    no_and_pre_health = no_and_pre_diabetes_set[condition]
+    #diabetes data
+    diabetes_health = diabetes_set[condition]
+
+    #finds the average value of all health days
+    mean_no_pre = no_and_pre_health.mean()
+    mean_diabetes = diabetes_health.mean()
+
+    plt.figure()
+
+    #histogram for  health days for no diabetes and pre diabetes
+    plt.subplot(1, 2, 1) #first subplot of the two
+    plt.hist(no_and_pre_health, bins = 15, density = True) #shows density data instead of raw numbers
+    #set x and y axis limits
+    plt.xlim(0, 30)
+    plt.ylim(0.0, 0.40)
+    #plot the average value
+    plt.axvline(mean_no_pre, color = "red", linestyle = "dashed")
+    #set title and axis labels
+    plt.xlabel("Number of poor days in the last 30 days")
+    plt.ylabel("Frequency")
+    plt.title("Poor " + condition_name +  " days for\n no diabetes and pre-diabetes")
+
+    #histogram for health for diabetes
+    plt.subplot(1, 2, 2) #second subplot of the two
+    plt.hist(diabetes_health, bins = 15, density = True) #shows density data instead of raw numbers
+    #set x and y axis limits
+    plt.xlim(0, 30)
+    plt.ylim(0.0, 0.40)
+    #show average value
+    plt.axvline(mean_diabetes, color = "red", linestyle = "dashed")
+    #label the title and axes
+    plt.xlabel("Number of poor days in the last 30 days")
+    plt.ylabel("Frequency")
+    plt.title("Poor " + condition_name +  " days for\n diabetes")
+
+    plt.tight_layout()
+    plt.savefig(condition_name + "_histograms.jpg")
+    plt.show()
+
+def mean_and_standard_deviation(data, column):
+    """
+    Returns a string with the mean and standard deviation of a specific column in a data frame.
+
+    Example:
+    >>> mean_and_standard_deviation(["Diabetes_012", "HighBP", "HighChol", "MentHlth", "PhysHlth", "Sex"]
+                [0, 0, 1, 15, 0, 0],
+                [1, 1, 1, 0, 12, 0],
+                [2, 1, 0, 1, 13, 0], "PhysHlth")
+    The mean is 5.0 and the standard deviation is 7.75.
+    """
+
+    mean = round(data[column].mean(), 2) #find the mean of the column of the data set and round it
+    standard_deviation = round(data[column].std(), 2) #find the standard devation of the same column and round it
+
+    return "The mean is " + str(mean) + " and the standard deviation is " + str(standard_deviation) + "."
+
+
+raw_df = pd.read_csv("diabetes_012_health_indicators_BRFSS2015.csv") #reading the data file
+cleaned_df = clean_data(raw_df) #cleaning the data file
+
+#creating the subsets for those without diabetes and those with diabetes
+no_and_pre_diabetes = no_and_pre_diabetes_subset(cleaned_df)
+diabetes = diabetes_subset(cleaned_df)
+
+#bar graph of people with diabetes who have other conditions
+co_occurrences = conditions_co_occurrences(diabetes)
+display_bar_graph(co_occurrences)
+
+#heat map of how many people have multiple conditions
+co_occurrence_percent = co_occurrences_to_percentages(co_occurrences)
+display_heat_map(co_occurrence_percent)
+
+#prints dictionary with what percentage of females and males have diabetes in this data set
+percentages2 = diabetes_and_gender_percent(cleaned_df)
+print(percentages2)
+
+#makes two histograms to show distribution of porr health days: one for physical health and one for mental health
+make_health_hist(no_and_pre_diabetes, diabetes, "PhysHlth")
+make_health_hist(no_and_pre_diabetes, diabetes, "MentHlth")
+
+#finding the mean and standard devation of poor health days for people with and without diabetes
+no_pre_mean_STD_ment = mean_and_standard_deviation(no_and_pre_diabetes, "MentHlth")
+print(no_pre_mean_STD_ment)
+diabetes_mean_STD_ment = mean_and_standard_deviation(diabetes, "MentHlth")
+print(diabetes_mean_STD_ment)
+no_pre_mean_STD_phys = mean_and_standard_deviation(no_and_pre_diabetes, "PhysHlth")
+print(no_pre_mean_STD_phys)
+diabetes_mean_STD_phys = mean_and_standard_deviation(diabetes, "PhysHlth")
+print(diabetes_mean_STD_phys)
